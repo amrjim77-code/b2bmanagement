@@ -3,6 +3,17 @@ export type PaymentStatus = 'Unpaid' | 'Partial' | 'Settled';
 export type PaymentMethod = 'Cash' | 'Bank' | 'bKash' | 'Nagad';
 export type PartyType = 'Client' | 'Vendor';
 
+export interface DealItem {
+  id: string;
+  itemDescription: string;
+  quantity: number;
+  unit: string;
+  vendorRate: number;    // buying rate per unit
+  sellingRate: number;   // selling rate per unit
+  totalCost?: number;    // quantity * vendorRate
+  totalSelling?: number; // quantity * sellingRate
+}
+
 export interface Deal {
   id: string;
   dealNumber: string; // e.g. DEAL-101
@@ -12,6 +23,7 @@ export interface Deal {
   itemDescription: string;
   quantity: number;
   unit: string; // ton, kg, pcs, carton, bag, etc.
+  items?: DealItem[]; // Support for multiple items in a single supply deal
   
   // Financials
   vendorRate: number;      // per unit or total

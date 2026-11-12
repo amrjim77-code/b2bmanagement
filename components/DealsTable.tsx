@@ -192,12 +192,19 @@ export function DealsTable({ initialSearch = '' }: DealsTableProps) {
 
                     {/* Item & Quantity */}
                     <td className="py-3.5 px-4">
-                      <div className="font-bold text-slate-900 truncate max-w-[160px]">
+                      <div className="font-bold text-slate-900 truncate max-w-[180px]" title={deal.itemDescription}>
                         {deal.itemDescription}
                       </div>
-                      <span className="text-[11px] text-slate-600 tabular-nums">
-                        {formatNumber(deal.quantity)} {deal.unit}
-                      </span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[11px] text-slate-600 tabular-nums">
+                          {formatNumber(deal.quantity)} {deal.unit}
+                        </span>
+                        {deal.items && deal.items.length > 1 && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-50 text-[#5345E6] font-bold border border-purple-200/60">
+                            {deal.items.length} items
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Total Buying Cost */}

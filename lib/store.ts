@@ -211,6 +211,11 @@ export const useAppStore = create<AppStore>()(
         if (input.itemDescription) {
           get().saveItemIfNotExists(input.itemDescription);
         }
+        if (input.items && input.items.length > 0) {
+          input.items.forEach(it => {
+            if (it.itemDescription) get().saveItemIfNotExists(it.itemDescription);
+          });
+        }
 
         const netProfit = input.sellingPrice - input.totalBuyingCost;
         const profitMarginPct = input.sellingPrice > 0 
@@ -245,6 +250,11 @@ export const useAppStore = create<AppStore>()(
         }
         if (updateData.itemDescription) {
           get().saveItemIfNotExists(updateData.itemDescription);
+        }
+        if (updateData.items && updateData.items.length > 0) {
+          updateData.items.forEach(it => {
+            if (it.itemDescription) get().saveItemIfNotExists(it.itemDescription);
+          });
         }
 
         let updatedDeal: Deal | undefined;

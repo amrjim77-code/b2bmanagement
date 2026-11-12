@@ -407,9 +407,16 @@ export function DashboardView({ onNavigateToDeals, onNavigateToLedgers }: Dashbo
                       <span className={`w-1.5 h-1.5 rounded-full ${dotColors[idx % 4]}`}></span>
                     </div>
                     <div className="flex-1">
-                      <p className="text-xs font-bold text-slate-900 group-hover:text-[#5345E6] transition-colors leading-none truncate max-w-[200px]">
-                        {deal.itemDescription}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-bold text-slate-900 group-hover:text-[#5345E6] transition-colors leading-none truncate max-w-[200px]" title={deal.itemDescription}>
+                          {deal.itemDescription}
+                        </p>
+                        {deal.items && deal.items.length > 1 && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-50 text-[#5345E6] font-bold">
+                            {deal.items.length} items
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[10px] text-slate-400 font-medium mt-1">
                         {deal.clientName} • {deal.quantity} {deal.unit} • {formatCurrency(deal.sellingPrice)}
                       </p>

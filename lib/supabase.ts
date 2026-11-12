@@ -103,13 +103,24 @@ interface DbPartyRow {
 }
 
 export function mapDealToDb(deal: Deal) {
+  let combinedNotes = deal.notes || '';
+  if (deal.items && deal.items.length > 0) {
+    const cleanNotes = combinedNotes.split('---ITEMS_DATA---')[0].trim();
+    combinedNotes = (cleanNotes ? cleanNotes + '\n' : '') + '---ITEMS_DATA---' + JSON.stringify(deal.items);
+  }
+
+  // If multiple items, make item_description a readable summary of all items
+  const summaryDescription = deal.items && deal.items.length > 1
+    ? deal.items.map(i => `${i.itemDescription} (${i.quantity} ${i.unit})`).join(', ')
+    : deal.itemDescription;
+
   return {
     id: deal.id,
     deal_number: deal.dealNumber,
     date: deal.date,
     client_name: deal.clientName,
     vendor_name: deal.vendorName,
-    item_description: deal.itemDescription,
+    item_description: summaryDescription || deal.itemDescription,
     quantity: deal.quantity,
     unit: deal.unit,
     vendor_rate: deal.vendorRate,
@@ -122,12 +133,25 @@ export function mapDealToDb(deal: Deal) {
     payment_status: deal.paymentStatus,
     client_paid_amount: deal.clientPaidAmount,
     vendor_paid_amount: deal.vendorPaidAmount,
-    notes: deal.notes || null,
+    notes: combinedNotes || null,
     created_at: deal.createdAt,
   };
 }
 
 export function mapDbToDeal(row: DbDealRow): Deal {
+  let notes = row.notes || undefined;
+  let items: Deal['items'] = undefined;
+
+  if (notes && notes.includes('---ITEMS_DATA---')) {
+    const parts = notes.split('---ITEMS_DATA---');
+    notes = parts[0].trim() || undefined;
+    try {
+      items = JSON.parse(parts[1]);
+    } catch (e) {
+      console.warn('Failed to parse items JSON:', e);
+    }
+  }
+
   return {
     id: row.id,
     dealNumber: row.deal_number,
@@ -137,6 +161,7 @@ export function mapDbToDeal(row: DbDealRow): Deal {
     itemDescription: row.item_description,
     quantity: Number(row.quantity),
     unit: row.unit,
+    items,
     vendorRate: Number(row.vendor_rate),
     transportCost: Number(row.transport_cost),
     totalBuyingCost: Number(row.total_buying_cost),
@@ -147,7 +172,7 @@ export function mapDbToDeal(row: DbDealRow): Deal {
     paymentStatus: row.payment_status,
     clientPaidAmount: Number(row.client_paid_amount || 0),
     vendorPaidAmount: Number(row.vendor_paid_amount || 0),
-    notes: row.notes || undefined,
+    notes,
     createdAt: row.created_at,
   };
 }

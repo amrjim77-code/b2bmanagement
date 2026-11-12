@@ -138,28 +138,62 @@ export function PrintModal() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              <tr className="hover:bg-slate-50">
-                <td className="py-3 px-3 border-r border-slate-200 text-center font-mono">1</td>
-                <td className="py-3 px-3 border-r border-slate-200 font-semibold text-slate-900">
-                  {printingDeal.itemDescription}
-                </td>
-                <td className="py-3 px-3 border-r border-slate-200 text-right font-bold text-slate-900 tabular-nums">
-                  {formatNumber(printingDeal.quantity)}
-                </td>
-                <td className="py-3 px-3 border-r border-slate-200 text-center text-slate-600">
-                  {printingDeal.unit}
-                </td>
-                {isInvoice && (
-                  <>
-                    <td className="py-3 px-3 border-r border-slate-200 text-right tabular-nums text-slate-700">
-                      {formatCurrency(printingDeal.sellingPrice / (printingDeal.quantity || 1))}
-                    </td>
-                    <td className="py-3 px-3 text-right tabular-nums font-black text-slate-950">
-                      {formatCurrency(printingDeal.sellingPrice)}
-                    </td>
-                  </>
-                )}
-              </tr>
+              {printingDeal.items && printingDeal.items.length > 0 ? (
+                printingDeal.items.map((item, index) => {
+                  const lineUnitRate = item.sellingRate || (item.totalSelling ? (item.totalSelling / item.quantity) : (printingDeal.sellingPrice / (printingDeal.quantity || 1)));
+                  const lineTotal = item.sellingRate ? (item.sellingRate * item.quantity) : (item.totalSelling || printingDeal.sellingPrice);
+
+                  return (
+                    <tr key={item.id || index} className="hover:bg-slate-50">
+                      <td className="py-2.5 px-3 border-r border-slate-200 text-center font-mono text-xs">
+                        {index + 1}
+                      </td>
+                      <td className="py-2.5 px-3 border-r border-slate-200 font-semibold text-slate-900">
+                        {item.itemDescription}
+                      </td>
+                      <td className="py-2.5 px-3 border-r border-slate-200 text-right font-bold text-slate-900 tabular-nums">
+                        {formatNumber(item.quantity)}
+                      </td>
+                      <td className="py-2.5 px-3 border-r border-slate-200 text-center text-slate-600">
+                        {item.unit}
+                      </td>
+                      {isInvoice && (
+                        <>
+                          <td className="py-2.5 px-3 border-r border-slate-200 text-right tabular-nums text-slate-700">
+                            {formatCurrency(lineUnitRate)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right tabular-nums font-black text-slate-950">
+                            {formatCurrency(lineTotal)}
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr className="hover:bg-slate-50">
+                  <td className="py-3 px-3 border-r border-slate-200 text-center font-mono">1</td>
+                  <td className="py-3 px-3 border-r border-slate-200 font-semibold text-slate-900">
+                    {printingDeal.itemDescription}
+                  </td>
+                  <td className="py-3 px-3 border-r border-slate-200 text-right font-bold text-slate-900 tabular-nums">
+                    {formatNumber(printingDeal.quantity)}
+                  </td>
+                  <td className="py-3 px-3 border-r border-slate-200 text-center text-slate-600">
+                    {printingDeal.unit}
+                  </td>
+                  {isInvoice && (
+                    <>
+                      <td className="py-3 px-3 border-r border-slate-200 text-right tabular-nums text-slate-700">
+                        {formatCurrency(printingDeal.sellingPrice / (printingDeal.quantity || 1))}
+                      </td>
+                      <td className="py-3 px-3 text-right tabular-nums font-black text-slate-950">
+                        {formatCurrency(printingDeal.sellingPrice)}
+                      </td>
+                    </>
+                  )}
+                </tr>
+              )}
             </tbody>
           </table>
 

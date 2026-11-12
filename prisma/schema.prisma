@@ -1,0 +1,309 @@
+// Prisma Schema for B2B Supplier & Trading Management Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PaymentTerms {
+  ADVANCE
+  CASH_ON_DELIVERY
+  NET_15
+  NET_30
+  NET_60
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  SOURCING
+  IN_TRANSIT
+  PARTIALLY_DELIVERED
+  DELIVERED
+  INVOICED
+  CLOSED
+  CANCELLED
+}
+
+enum WorkflowType {
+  BACK_TO_BACK // Drop-ship / Brokered supply directly backed by vendor PO
+  STOCK_SUPPLY // Bulk warehouse stock fulfilled across clients
+}
+
+enum PurchaseOrderStatus {
+  ISSUED
+  CONFIRMED
+  IN_TRANSIT
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+}
+
+enum PaymentType {
+  INCOMING_CLIENT
+  OUTGOING_VENDOR
+  EXPENSE
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CASH
+  CHEQUE
+  MFS // Mobile Financial Services (bKash, Nagad, etc.)
+}
+
+enum ChequeStatus {
+  PENDING_CLEARANCE
+  CLEARED
+  BOUNCED
+}
+
+model Vendor {
+  id              String         @id @default(cuid())
+  name            String
+  code            String         @unique
+  contactPerson   String
+  phone           String
+  email           String
+  address         String
+  category        String
+  paymentTerms    PaymentTerms   @default(NET_30)
+  balancePayable  Decimal        @default(0.0) @db.Decimal(12, 2)
+  rating          Float          @default(4.5)
+  leadTimeDays    Int            @default(7)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  purchaseOrders  PurchaseOrder[]
+  priceQuotes     VendorProductPrice[]
+  payments        Payment[]
+
+  @@map("vendors")
+}
+
+model Client {
+  id                String         @id @default(cuid())
+  name              String
+  code              String         @unique
+  contactPerson     String
+  phone             String
+  email             String
+  billingAddress    String
+  shippingAddress   String
+  creditLimit       Decimal        @default(100000.0) @db.Decimal(12, 2)
+  balanceReceivable Decimal        @default(0.0) @db.Decimal(12, 2)
+  paymentTerms      PaymentTerms   @default(NET_30)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  salesOrders       SalesOrder[]
+  clientPriceQuotes ClientProductPrice[]
+  payments          Payment[]
+
+  @@map("clients")
+}
+
+model Product {
+  id               String               @id @default(cuid())
+  sku              String               @unique
+  name             String
+  category         String
+  unit             String               // kg, ton, pcs, carton, liter, box
+  defaultBuyPrice  Decimal              @db.Decimal(12, 2)
+  defaultSellPrice Decimal              @db.Decimal(12, 2)
+  currentStock     Decimal              @default(0.0) @db.Decimal(12, 2)
+  committedStock   Decimal              @default(0.0) @db.Decimal(12, 2) // Reserved for client orders
+  incomingStock    Decimal              @default(0.0) @db.Decimal(12, 2) // On active vendor POs
+  reorderLevel     Decimal              @default(10.0) @db.Decimal(12, 2)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  salesOrderItems  SalesOrderItem[]
+  poItems          PurchaseOrderItem[]
+  vendorPrices     VendorProductPrice[]
+  clientPrices     ClientProductPrice[]
+  inventoryBatches InventoryBatch[]
+
+  @@map("products")
+}
+
+model VendorProductPrice {
+  id              String    @id @default(cuid())
+  vendorId        String
+  productId       String
+  lastQuotedPrice Decimal   @db.Decimal(12, 2)
+  moq             Decimal   @default(1.0) @db.Decimal(10, 2) // Minimum Order Qty
+  leadTimeDays    Int       @default(5)
+  updatedAt       DateTime  @updatedAt
+
+  vendor          Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  product         Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([vendorId, productId])
+  @@map("vendor_product_prices")
+}
+
+model ClientProductPrice {
+  id              String    @id @default(cuid())
+  clientId        String
+  productId       String
+  agreedSellPrice Decimal   @db.Decimal(12, 2)
+  updatedAt       DateTime  @updatedAt
+
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  product         Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, productId])
+  @@map("client_product_prices")
+}
+
+model SalesOrder {
+  id              String            @id @default(cuid())
+  orderNumber     String            @unique // e.g. SO-2026-001
+  clientId        String
+  workflowType    WorkflowType      @default(BACK_TO_BACK)
+  status          SalesOrderStatus  @default(CONFIRMED)
+  paymentStatus   PaymentStatus     @default(UNPAID)
+  totalRevenue    Decimal           @db.Decimal(12, 2)
+  totalCogs       Decimal           @db.Decimal(12, 2)
+  totalExpenses   Decimal           @default(0.0) @db.Decimal(12, 2)
+  netProfit       Decimal           @db.Decimal(12, 2)
+  netMarginPct    Decimal           @db.Decimal(5, 2)
+  orderDate       DateTime          @default(now())
+  deliveryDate    DateTime?
+  shippingAddress String?
+  notes           String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  client          Client            @relation(fields: [clientId], references: [id])
+  items           SalesOrderItem[]
+  purchaseOrders  PurchaseOrder[]   @relation("SalesOrderToPOs")
+  payments        Payment[]
+  challans        DeliveryChallan[]
+
+  @@map("sales_orders")
+}
+
+model SalesOrderItem {
+  id             String      @id @default(cuid())
+  salesOrderId   String
+  productId      String
+  quantity       Decimal     @db.Decimal(12, 2)
+  unitSellPrice  Decimal     @db.Decimal(12, 2)
+  unitCostPrice  Decimal     @db.Decimal(12, 2)
+  fulfilledQty   Decimal     @default(0.0) @db.Decimal(12, 2)
+  notes          String?
+
+  salesOrder     SalesOrder  @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  product        Product     @relation(fields: [productId], references: [id])
+
+  @@map("sales_order_items")
+}
+
+model PurchaseOrder {
+  id                 String              @id @default(cuid())
+  poNumber           String              @unique // e.g. PO-2026-001
+  vendorId           String
+  linkedSalesOrderId String?
+  status             PurchaseOrderStatus @default(ISSUED)
+  paymentStatus      PaymentStatus       @default(UNPAID)
+  totalAmount        Decimal             @db.Decimal(12, 2)
+  shippingCost       Decimal             @default(0.0) @db.Decimal(12, 2)
+  expectedDate       DateTime?
+  receivedDate       DateTime?
+  notes              String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  vendor             Vendor              @relation(fields: [vendorId], references: [id])
+  linkedSalesOrder   SalesOrder?         @relation("SalesOrderToPOs", fields: [linkedSalesOrderId], references: [id], onDelete: SetNull)
+  items              PurchaseOrderItem[]
+  payments           Payment[]
+
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  productId       String
+  quantity        Decimal       @db.Decimal(12, 2)
+  unitBuyPrice    Decimal       @db.Decimal(12, 2)
+  receivedQty     Decimal       @default(0.0) @db.Decimal(12, 2)
+
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product         Product       @relation(fields: [productId], references: [id])
+
+  @@map("purchase_order_items")
+}
+
+model DeliveryChallan {
+  id            String      @id @default(cuid())
+  challanNumber String      @unique // e.g. DC-2026-001
+  salesOrderId  String
+  vehicleNumber String?
+  driverName    String?
+  driverPhone   String?
+  dispatchedAt  DateTime    @default(now())
+  deliveredAt   DateTime?
+  receiverSign  String?
+  notes         String?
+
+  salesOrder    SalesOrder  @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+
+  @@map("delivery_challans")
+}
+
+model InventoryBatch {
+  id             String    @id @default(cuid())
+  batchNumber    String    @unique
+  productId      String
+  quantity       Decimal   @db.Decimal(12, 2)
+  basePrice      Decimal   @db.Decimal(12, 2)
+  landedCost     Decimal   @db.Decimal(12, 2) // Base + Freight + Duty allocated
+  warehouseLoc   String    @default("Central Hub - Bay A")
+  receivedDate   DateTime  @default(now())
+  expiryDate     DateTime?
+
+  product        Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("inventory_batches")
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  type           PaymentType   // INCOMING_CLIENT, OUTGOING_VENDOR, EXPENSE
+  salesOrderId   String?
+  poId           String?
+  clientId       String?
+  vendorId       String?
+  amount         Decimal       @db.Decimal(12, 2)
+  paymentMethod  PaymentMethod
+  transactionRef String?       // Cheque # or Bank TxID or MFS TxID
+  chequeStatus   ChequeStatus?
+  clearanceDate  DateTime?
+  paymentDate    DateTime      @default(now())
+  notes          String?
+  expenseCategory String?      // e.g. "Freight & Logistics", "Labor & Handling", "Port Duties"
+  createdAt      DateTime      @default(now())
+
+  salesOrder     SalesOrder?   @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  purchaseOrder  PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
+  client         Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  vendor         Vendor?       @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+
+  @@map("payments")
+}
+

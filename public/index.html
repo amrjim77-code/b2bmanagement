@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TraderHub - B2B Supply & Order Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              DEFAULT: '#5345E6',
+              hover: '#4335D6',
+              light: '#EEEDFC',
+            },
+            surface: '#F4F5F9'
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Supabase JS Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    @media print {
+      body * { visibility: hidden; }
+      #printableInvoice, #printableInvoice * { visibility: visible; }
+      #printableInvoice { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 20px; }
+    }
+  </style>
+</head>
+<body class="bg-surface font-sans antialiased text-slate-800 selection:bg-brand/20 selection:text-brand min-h-screen flex">
+
+  <!-- Left Sidebar -->
+  <aside class="w-64 bg-white border-r border-slate-100 flex flex-col justify-between shrink-0 min-h-screen sticky top-0 hidden md:flex">
+    <div>
+      <!-- Brand Logo -->
+      <div class="p-6 flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-brand text-white flex items-center justify-center font-extrabold text-lg shadow-md shadow-brand/30">
+          TH
+        </div>
+        <div>
+          <h1 class="font-bold text-slate-900 text-base leading-tight">TraderHub</h1>
+          <p class="text-[11px] font-semibold text-slate-400">B2B Management</p>
+        </div>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="px-4 space-y-1">
+        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all bg-brand text-white shadow-sm shadow-brand/25">
+          <i data-lucide="layout-dashboard" class="w-5 h-5"></i>
+          <span>Dashboard</span>
+        </button>
+
+        <button onclick="switchTab('deals')" id="nav-deals" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+          <i data-lucide="arrow-left-right" class="w-5 h-5"></i>
+          <span>Deals & Orders</span>
+          <span id="nav-deals-badge" class="ml-auto text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bold">0</span>
+        </button>
+
+        <button onclick="switchTab('clients')" id="nav-clients" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+          <i data-lucide="users" class="w-5 h-5"></i>
+          <span>Client Ledgers</span>
+        </button>
+
+        <button onclick="switchTab('vendors')" id="nav-vendors" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all text-slate-600 hover:bg-slate-50 hover:text-slate-900">
+          <i data-lucide="truck" class="w-5 h-5"></i>
+          <span>Vendor Ledgers</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- Bottom Status / Supabase Connected -->
+    <div class="p-4 m-4 bg-slate-50 rounded-2xl border border-slate-100">
+      <div class="flex items-center gap-2 mb-2">
+        <div id="dbStatusDot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></div>
+        <span id="dbStatusText" class="text-xs font-bold text-slate-700">Connecting Supabase...</span>
+      </div>
+      <p class="text-[11px] text-slate-400 leading-tight">Auto-syncing orders and ledgers to Supabase cloud.</p>
+    </div>
+  </aside>
+
+  <!-- Main Content Wrapper -->
+  <div class="flex-1 flex flex-col min-w-0">
+    <!-- Top Header -->
+    <header class="h-18 bg-white border-b border-slate-100 px-4 sm:px-8 flex items-center justify-between sticky top-0 z-20">
+      <div class="flex items-center gap-3 flex-1 max-w-md">
+        <div class="relative w-full">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+          <input 
+            type="text" 
+            id="searchInput" 
+            placeholder="Search deals, clients, commodities..." 
+            oninput="handleSearch(this.value)"
+            class="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-slate-50 rounded-full border border-transparent focus:border-brand focus:bg-white focus:outline-none transition-all placeholder:text-slate-400 font-medium"
+          />
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button onclick="exportCSV()" class="hidden sm:flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>Export CSV</span>
+        </button>
+
+        <button onclick="openDealModal()" class="flex items-center gap-1.5 px-4 py-2 bg-brand hover:bg-brand-hover text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-brand/25">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>+ Add Deal</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Page Body -->
+    <main class="flex-1 p-4 sm:p-8 max-w-7xl w-full">
+      
+      <!-- TAB 1: DASHBOARD VIEW -->
+      <section id="tab-dashboard" class="space-y-6">
+        <div>
+          <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Executive Trading Overview</h2>
+          <p class="text-xs text-slate-400 font-medium mt-1">Real-time metrics, cashflow balances, and active B2B orders.</p>
+        </div>
+
+        <!-- 4 Metric Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <!-- Total Deals -->
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Deals</span>
+              <div class="w-9 h-9 rounded-xl bg-purple-50 text-brand flex items-center justify-center">
+                <i data-lucide="arrow-left-right" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="mt-3">
+              <h3 id="metric-deals-count" class="text-2xl font-black text-slate-900">0</h3>
+              <p class="text-[11px] text-slate-400 font-medium mt-0.5">Recorded orders</p>
+            </div>
+          </div>
+
+          <!-- Total Revenue -->
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Gross Turnover</span>
+              <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <i data-lucide="trending-up" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="mt-3">
+              <h3 id="metric-revenue" class="text-2xl font-black text-slate-900">৳0</h3>
+              <p class="text-[11px] text-slate-400 font-medium mt-0.5">Total trade value</p>
+            </div>
+          </div>
+
+          <!-- Net Profit -->
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Net Profit</span>
+              <div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                <i data-lucide="badge-check" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="mt-3">
+              <h3 id="metric-profit" class="text-2xl font-black text-emerald-600">৳0</h3>
+              <p id="metric-margin" class="text-[11px] text-slate-400 font-medium mt-0.5">0.0% avg margin</p>
+            </div>
+          </div>
+
+          <!-- Pending Receivables -->
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Client Due</span>
+              <div class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <i data-lucide="clock" class="w-4 h-4"></i>
+              </div>
+            </div>
+            <div class="mt-3">
+              <h3 id="metric-due" class="text-2xl font-black text-amber-600">৳0</h3>
+              <p class="text-[11px] text-slate-400 font-medium mt-0.5">Pending collection</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Deals Table Container -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div class="p-5 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="font-bold text-slate-900 text-sm">Recent Deals & Transactions</h3>
+            <button onclick="switchTab('deals')" class="text-xs font-bold text-brand hover:underline">View All</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100">
+                <tr>
+                  <th class="py-3 px-5">Deal #</th>
+                  <th class="py-3 px-5">Date</th>
+                  <th class="py-3 px-5">Buyer / Client</th>
+                  <th class="py-3 px-5">Supplier / Vendor</th>
+                  <th class="py-3 px-5">Product & Qty</th>
+                  <th class="py-3 px-5">Selling Value</th>
+                  <th class="py-3 px-5">Net Profit</th>
+                  <th class="py-3 px-5">Delivery</th>
+                  <th class="py-3 px-5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="dashboard-deals-tbody" class="divide-y divide-slate-100 font-medium text-slate-700">
+                <!-- Dynamically populated or empty state -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: DEALS VIEW -->
+      <section id="tab-deals" class="space-y-6 hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Supply Deals & Orders Tracker</h2>
+            <p class="text-xs text-slate-400 font-medium mt-1">Manage deal lifecycle, monitor transit status, calculate profit margins.</p>
+          </div>
+          <button onclick="openDealModal()" class="flex items-center gap-1.5 px-4 py-2.5 bg-brand hover:bg-brand-hover text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-brand/25">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>+ Add New Deal</span>
+          </button>
+        </div>
+
+        <!-- Deals Full Table -->
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 text-slate-400 font-bold uppercase tracking-wider border-b border-slate-100">
+                <tr>
+                  <th class="py-3.5 px-5">Deal ID</th>
+                  <th class="py-3.5 px-5">Date</th>
+                  <th class="py-3.5 px-5">Client</th>
+                  <th class="py-3.5 px-5">Vendor</th>
+                  <th class="py-3.5 px-5">Commodity / Qty</th>
+                  <th class="py-3.5 px-5">Total Selling</th>
+                  <th class="py-3.5 px-5">Net Profit</th>
+                  <th class="py-3.5 px-5">Delivery</th>
+                  <th class="py-3.5 px-5">Payment</th>
+                  <th class="py-3.5 px-5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="all-deals-tbody" class="divide-y divide-slate-100 font-medium text-slate-700">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: CLIENTS VIEW -->
+      <section id="tab-clients" class="space-y-6 hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Client Receivables Ledger</h2>
+            <p class="text-xs text-slate-400 font-medium mt-1">Track client accounts, billings, received funds, and outstanding dues.</p>
+          </div>
+          <button onclick="openPartyModal('Client')" class="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-all">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>+ Add Client</span>
+          </button>
+        </div>
+
+        <div id="clients-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- TAB 4: VENDORS VIEW -->
+      <section id="tab-vendors" class="space-y-6 hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">Vendor Payables Ledger</h2>
+            <p class="text-xs text-slate-400 font-medium mt-1">Manage suppliers, procurement invoices, payments released, and pending payables.</p>
+          </div>
+          <button onclick="openPartyModal('Vendor')" class="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl text-xs font-bold transition-all">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>+ Add Vendor</span>
+          </button>
+        </div>
+
+        <div id="vendors-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL: ADD DEAL -->
+  <div id="dealModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl w-full max-w-2xl border border-slate-100 shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
+      <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-bold text-slate-900">Record New Supply Deal</h3>
+          <p class="text-xs text-slate-400 mt-0.5">Auto-calculates buying cost, gross sale, net profit, and profit margin.</p>
+        </div>
+        <button onclick="closeDealModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold">&times;</button>
+      </div>
+
+      <form id="dealForm" onsubmit="saveDeal(event)" class="p-6 overflow-y-auto space-y-4 text-xs font-medium">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-slate-700 font-bold mb-1">Client / Buyer Name *</label>
+            <input type="text" id="dealClient" required placeholder="e.g. Acme Corporation" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-slate-700 font-bold mb-1">Vendor / Supplier Name *</label>
+            <input type="text" id="dealVendor" required placeholder="e.g. Apex Steel Ltd" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="sm:col-span-2">
+            <label class="block text-slate-700 font-bold mb-1">Item / Commodity Description *</label>
+            <input type="text" id="dealItem" required placeholder="e.g. 500W Deformed Rebar" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-slate-700 font-bold mb-1">Unit</label>
+            <input type="text" id="dealUnit" value="ton" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-slate-700 font-bold mb-1">Quantity *</label>
+            <input type="number" step="any" id="dealQty" required value="1" oninput="calcDealProfit()" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-slate-700 font-bold mb-1">Vendor Buying Rate (৳) *</label>
+            <input type="number" step="any" id="dealVendorRate" required placeholder="0" oninput="calcDealProfit()" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-slate-700 font-bold mb-1">Transport / Extras (৳)</label>
+            <input type="number" step="any" id="dealTransport" value="0" oninput="calcDealProfit()" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none" />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-slate-700 font-bold mb-1">Client Selling Price (Total ৳) *</label>
+            <input type="number" step="any" id="dealSelling" required placeholder="0" oninput="calcDealProfit()" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-slate-700 font-bold mb-1">Delivery Status</label>
+            <select id="dealDelivery" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none">
+              <option value="Pending">Pending Transit</option>
+              <option value="Delivered">Delivered</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Live Margin Summary Banner -->
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 flex items-center justify-between">
+          <div>
+            <p class="text-[11px] text-slate-400 font-bold uppercase">Estimated Buying Cost</p>
+            <p id="previewBuyCost" class="text-sm font-black text-slate-700">৳0</p>
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-400 font-bold uppercase">Net Profit</p>
+            <p id="previewNetProfit" class="text-sm font-black text-emerald-600">৳0</p>
+          </div>
+          <div>
+            <p class="text-[11px] text-slate-400 font-bold uppercase">Margin %</p>
+            <p id="previewMargin" class="text-sm font-black text-brand">0.0%</p>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-3">
+          <button type="button" onclick="closeDealModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-brand hover:bg-brand-hover text-white font-bold shadow-sm shadow-brand/25">Save Deal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: ADD PARTY (Client / Vendor) -->
+  <div id="partyModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl w-full max-w-md border border-slate-100 shadow-xl overflow-hidden">
+      <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+        <h3 id="partyModalTitle" class="text-lg font-bold text-slate-900">Add New Directory Party</h3>
+        <button onclick="closePartyModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold">&times;</button>
+      </div>
+      <form id="partyForm" onsubmit="saveParty(event)" class="p-6 space-y-4 text-xs font-medium">
+        <input type="hidden" id="partyType" />
+        <div>
+          <label class="block text-slate-700 font-bold mb-1">Business / Company Name *</label>
+          <input type="text" id="partyName" required placeholder="e.g. Bengal Trading" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-slate-700 font-bold mb-1">Phone Number</label>
+          <input type="text" id="partyPhone" placeholder="+880 1..." class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none" />
+        </div>
+        <div>
+          <label class="block text-slate-700 font-bold mb-1">Office Address</label>
+          <input type="text" id="partyAddress" placeholder="City, Location" class="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand focus:outline-none" />
+        </div>
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="closePartyModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold hover:bg-slate-50">Cancel</button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-brand hover:bg-brand-hover text-white font-bold">Save Party</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: PRINT INVOICE & CHALLAN -->
+  <div id="printModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl w-full max-w-2xl border border-slate-100 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <h3 class="font-bold text-slate-800 text-sm">Printable Trade Document</h3>
+        <div class="flex items-center gap-2">
+          <button onclick="window.print()" class="px-3 py-1.5 bg-brand hover:bg-brand-hover text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+            <i data-lucide="printer" class="w-3.5 h-3.5"></i>
+            <span>Print / Save PDF</span>
+          </button>
+          <button onclick="closePrintModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold px-2">&times;</button>
+        </div>
+      </div>
+      <div id="printableInvoice" class="p-8 overflow-y-auto font-sans bg-white text-slate-800">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Core JavaScript & Supabase Integration -->
+  <script>
+    // 1. Supabase Initialization
+    const SUPABASE_URL = "https://xzxwifdyixxfjlbnjrrv.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_JnzTpZsMOZntqEL6cZaikQ_bvFN6Trr";
+    let supabase = null;
+
+    if (window.supabase) {
+      supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    }
+
+    // State
+    let deals = [];
+    let parties = [];
+    let currentTab = 'dashboard';
+    let currentSearch = '';
+
+    // Currency Formatter
+    function fmtBDT(num) {
+      return '৳' + Number(num || 0).toLocaleString('en-US');
+    }
+
+    // Switch Tabs
+    function switchTab(tab) {
+      currentTab = tab;
+      const tabs = ['dashboard', 'deals', 'clients', 'vendors'];
+      tabs.forEach(t => {
+        const sec = document.getElementById('tab-' + t);
+        const nav = document.getElementById('nav-' + t);
+        if (t === tab) {
+          sec.classList.remove('hidden');
+          nav.className = "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all bg-brand text-white shadow-sm shadow-brand/25";
+        } else {
+          sec.classList.add('hidden');
+          nav.className = "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all text-slate-600 hover:bg-slate-50 hover:text-slate-900";
+        }
+      });
+      renderUI();
+    }
+
+    // Modal Handlers
+    function openDealModal() {
+      document.getElementById('dealModal').classList.remove('hidden');
+      calcDealProfit();
+    }
+    function closeDealModal() {
+      document.getElementById('dealModal').classList.add('hidden');
+      document.getElementById('dealForm').reset();
+    }
+    function openPartyModal(type) {
+      document.getElementById('partyType').value = type;
+      document.getElementById('partyModalTitle').innerText = 'Add New ' + type;
+      document.getElementById('partyModal').classList.remove('hidden');
+    }
+    function closePartyModal() {
+      document.getElementById('partyModal').classList.add('hidden');
+      document.getElementById('partyForm').reset();
+    }
+    function closePrintModal() {
+      document.getElementById('printModal').classList.add('hidden');
+    }
+
+    // Calculate profit dynamically inside Add Deal Modal
+    function calcDealProfit() {
+      const qty = parseFloat(document.getElementById('dealQty').value) || 0;
+      const vendorRate = parseFloat(document.getElementById('dealVendorRate').value) || 0;
+      const transport = parseFloat(document.getElementById('dealTransport').value) || 0;
+      const selling = parseFloat(document.getElementById('dealSelling').value) || 0;
+
+      const totalBuyCost = (qty * vendorRate) + transport;
+      const netProfit = selling - totalBuyCost;
+      const margin = selling > 0 ? ((netProfit / selling) * 100).toFixed(1) : '0.0';
+
+      document.getElementById('previewBuyCost').innerText = fmtBDT(totalBuyCost);
+      document.getElementById('previewNetProfit').innerText = fmtBDT(netProfit);
+      document.getElementById('previewMargin').innerText = margin + '%';
+    }
+
+    // Save Deal to Supabase & Local State
+    async function saveDeal(e) {
+      e.preventDefault();
+      const qty = parseFloat(document.getElementById('dealQty').value) || 1;
+      const vendorRate = parseFloat(document.getElementById('dealVendorRate').value) || 0;
+      const transport = parseFloat(document.getElementById('dealTransport').value) || 0;
+      const selling = parseFloat(document.getElementById('dealSelling').value) || 0;
+      const totalBuyCost = (qty * vendorRate) + transport;
+      const netProfit = selling - totalBuyCost;
+      const marginPct = selling > 0 ? parseFloat(((netProfit / selling) * 100).toFixed(1)) : 0;
+
+      const newDeal = {
+        id: 'deal_' + Date.now(),
+        deal_number: 'ORD-' + Math.floor(1000 + Math.random() * 9000),
+        date: new Date().toISOString().split('T')[0],
+        client_name: document.getElementById('dealClient').value.trim(),
+        vendor_name: document.getElementById('dealVendor').value.trim(),
+        item_description: document.getElementById('dealItem').value.trim(),
+        quantity: qty,
+        unit: document.getElementById('dealUnit').value.trim() || 'ton',
+        vendor_rate: vendorRate,
+        transport_cost: transport,
+        total_buying_cost: totalBuyCost,
+        selling_price: selling,
+        net_profit: netProfit,
+        profit_margin_pct: marginPct,
+        delivery_status: document.getElementById('dealDelivery').value,
+        payment_status: 'Unpaid',
+        client_paid_amount: 0,
+        vendor_paid_amount: 0,
+        notes: ''
+      };
+
+      deals.unshift(newDeal);
+      localStorage.setItem('traderhub_deals', JSON.stringify(deals));
+      closeDealModal();
+      renderUI();
+
+      // Cloud sync
+      if (supabase) {
+        try {
+          await supabase.from('deals').insert([newDeal]);
+        } catch (err) {
+          console.warn('Supabase sync note:', err);
+        }
+      }
+    }
+
+    // Save Party
+    async function saveParty(e) {
+      e.preventDefault();
+      const newParty = {
+        id: 'pty_' + Date.now(),
+        name: document.getElementById('partyName').value.trim(),
+        party_type: document.getElementById('partyType').value,
+        phone: document.getElementById('partyPhone').value.trim(),
+        address: document.getElementById('partyAddress').value.trim(),
+        contact_person: '',
+        payment_terms: '',
+        notes: ''
+      };
+
+      parties.push(newParty);
+      localStorage.setItem('traderhub_parties', JSON.stringify(parties));
+      closePartyModal();
+      renderUI();
+
+      if (supabase) {
+        try {
+          await supabase.from('saved_parties').insert([newParty]);
+        } catch (err) {
+          console.warn('Supabase party sync note:', err);
+        }
+      }
+    }
+
+    // Print Preview Modal
+    function showInvoice(dealId) {
+      const deal = deals.find(d => d.id === dealId);
+      if (!deal) return;
+
+      const html = `
+        <div class="border-b-2 border-slate-900 pb-6 mb-6 flex justify-between items-start">
+          <div>
+            <h1 class="text-3xl font-black tracking-tight text-slate-900">COMMERCIAL INVOICE</h1>
+            <p class="text-xs text-slate-500 font-bold uppercase mt-1">TraderHub B2B Logistics & Trading</p>
+          </div>
+          <div class="text-right text-xs">
+            <p class="font-bold text-slate-900 text-sm">Invoice #: ${deal.deal_number}</p>
+            <p class="text-slate-500">Date: ${deal.date}</p>
+            <p class="text-slate-500">Delivery Status: <span class="font-bold text-slate-800">${deal.delivery_status}</span></p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-8 mb-8 text-xs">
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <span class="text-[10px] font-bold text-slate-400 uppercase">Billed To (Client):</span>
+            <h4 class="font-bold text-sm text-slate-900 mt-1">${deal.client_name}</h4>
+          </div>
+          <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <span class="text-[10px] font-bold text-slate-400 uppercase">Sourced From (Supplier):</span>
+            <h4 class="font-bold text-sm text-slate-900 mt-1">${deal.vendor_name}</h4>
+          </div>
+        </div>
+
+        <table class="w-full text-left text-xs mb-8 border border-slate-200 rounded-lg overflow-hidden">
+          <thead class="bg-slate-100 font-bold text-slate-700 uppercase">
+            <tr>
+              <th class="p-3 border-b border-slate-200">Description</th>
+              <th class="p-3 border-b border-slate-200 text-center">Quantity</th>
+              <th class="p-3 border-b border-slate-200 text-right">Total Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="p-3 border-b border-slate-100 font-semibold text-slate-900">${deal.item_description}</td>
+              <td class="p-3 border-b border-slate-100 text-center">${deal.quantity} ${deal.unit}</td>
+              <td class="p-3 border-b border-slate-100 text-right font-bold">${fmtBDT(deal.selling_price)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="flex justify-end mb-8">
+          <div class="w-64 space-y-2 text-xs">
+            <div class="flex justify-between font-bold text-sm pt-2 border-t-2 border-slate-900">
+              <span>Total Payable:</span>
+              <span class="text-brand font-black">${fmtBDT(deal.selling_price)}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-8 border-t border-slate-200 text-[10px] text-slate-400 flex justify-between">
+          <p>Authorized Signature & Seal</p>
+          <p>Generated via TraderHub Cloud</p>
+        </div>
+      `;
+
+      document.getElementById('printableInvoice').innerHTML = html;
+      document.getElementById('printModal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    // Export CSV
+    function exportCSV() {
+      if (deals.length === 0) {
+        alert("No deals recorded yet to export.");
+        return;
+      }
+      const headers = ["Deal ID", "Date", "Client", "Vendor", "Item", "Quantity", "Unit", "Total Cost", "Selling Price", "Net Profit", "Margin %", "Delivery Status"];
+      const rows = deals.map(d => [
+        d.deal_number,
+        d.date,
+        `"${d.client_name}"`,
+        `"${d.vendor_name}"`,
+        `"${d.item_description}"`,
+        d.quantity,
+        d.unit,
+        d.total_buying_cost,
+        d.selling_price,
+        d.net_profit,
+        d.profit_margin_pct + '%',
+        d.delivery_status
+      ]);
+      const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `traderhub_deals_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // Search Handler
+    function handleSearch(val) {
+      currentSearch = val.toLowerCase().trim();
+      renderUI();
+    }
+
+    // Render Full UI
+    function renderUI() {
+      // Filter deals by search
+      const filteredDeals = deals.filter(d => {
+        if (!currentSearch) return true;
+        return (
+          d.client_name?.toLowerCase().includes(currentSearch) ||
+          d.vendor_name?.toLowerCase().includes(currentSearch) ||
+          d.item_description?.toLowerCase().includes(currentSearch) ||
+          d.deal_number?.toLowerCase().includes(currentSearch)
+        );
+      });
+
+      // 1. Metrics
+      const totalDeals = deals.length;
+      const totalRev = deals.reduce((acc, d) => acc + (parseFloat(d.selling_price) || 0), 0);
+      const totalProfit = deals.reduce((acc, d) => acc + (parseFloat(d.net_profit) || 0), 0);
+      const totalDue = deals.reduce((acc, d) => acc + ((parseFloat(d.selling_price) || 0) - (parseFloat(d.client_paid_amount) || 0)), 0);
+      const avgMargin = totalRev > 0 ? ((totalProfit / totalRev) * 100).toFixed(1) : '0.0';
+
+      document.getElementById('metric-deals-count').innerText = totalDeals;
+      document.getElementById('metric-revenue').innerText = fmtBDT(totalRev);
+      document.getElementById('metric-profit').innerText = fmtBDT(totalProfit);
+      document.getElementById('metric-margin').innerText = avgMargin + '% avg margin';
+      document.getElementById('metric-due').innerText = fmtBDT(totalDue);
+      document.getElementById('nav-deals-badge').innerText = totalDeals;
+
+      // 2. Dashboard Deals Table (Top 5)
+      const dashTbody = document.getElementById('dashboard-deals-tbody');
+      if (filteredDeals.length === 0) {
+        dashTbody.innerHTML = `
+          <tr>
+            <td colspan="9" class="py-8 text-center text-slate-400 font-medium">
+              No deals recorded yet. Click <strong>+ Add Deal</strong> to create your first order.
+            </td>
+          </tr>
+        `;
+      } else {
+        dashTbody.innerHTML = filteredDeals.slice(0, 5).map(d => `
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="py-3 px-5 font-bold text-slate-900">${d.deal_number}</td>
+            <td class="py-3 px-5 text-slate-400">${d.date}</td>
+            <td class="py-3 px-5 font-semibold text-slate-800">${d.client_name}</td>
+            <td class="py-3 px-5 text-slate-600">${d.vendor_name}</td>
+            <td class="py-3 px-5">${d.item_description} (${d.quantity} ${d.unit})</td>
+            <td class="py-3 px-5 font-bold text-slate-900">${fmtBDT(d.selling_price)}</td>
+            <td class="py-3 px-5 font-bold text-emerald-600">+${fmtBDT(d.net_profit)}</td>
+            <td class="py-3 px-5">
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${d.delivery_status === 'Delivered' ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-amber-50 text-amber-600 border border-amber-200'}">
+                ${d.delivery_status}
+              </span>
+            </td>
+            <td class="py-3 px-5 text-right">
+              <button onclick="showInvoice('${d.id}')" class="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-brand" title="Print Invoice">
+                <i data-lucide="printer" class="w-4 h-4"></i>
+              </button>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      // 3. All Deals Table
+      const allDealsTbody = document.getElementById('all-deals-tbody');
+      if (filteredDeals.length === 0) {
+        allDealsTbody.innerHTML = `
+          <tr>
+            <td colspan="10" class="py-10 text-center text-slate-400 font-medium">
+              No orders found matching your search.
+            </td>
+          </tr>
+        `;
+      } else {
+        allDealsTbody.innerHTML = filteredDeals.map(d => `
+          <tr class="hover:bg-slate-50 transition-colors">
+            <td class="py-3.5 px-5 font-bold text-slate-900">${d.deal_number}</td>
+            <td class="py-3.5 px-5 text-slate-400">${d.date}</td>
+            <td class="py-3.5 px-5 font-semibold text-slate-800">${d.client_name}</td>
+            <td class="py-3.5 px-5 text-slate-600">${d.vendor_name}</td>
+            <td class="py-3.5 px-5">${d.item_description} <span class="text-slate-400">(${d.quantity} ${d.unit})</span></td>
+            <td class="py-3.5 px-5 font-bold text-slate-900">${fmtBDT(d.selling_price)}</td>
+            <td class="py-3.5 px-5 font-bold text-emerald-600">+${fmtBDT(d.net_profit)}</td>
+            <td class="py-3.5 px-5">
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${d.delivery_status === 'Delivered' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}">
+                ${d.delivery_status}
+              </span>
+            </td>
+            <td class="py-3.5 px-5">
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${d.payment_status === 'Settled' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}">
+                ${d.payment_status}
+              </span>
+            </td>
+            <td class="py-3.5 px-5 text-right">
+              <button onclick="showInvoice('${d.id}')" class="px-3 py-1 bg-slate-100 hover:bg-brand hover:text-white rounded-lg text-slate-600 text-xs font-bold transition-all">
+                Invoice
+              </button>
+            </td>
+          </tr>
+        `).join('');
+      }
+
+      // 4. Clients Grid
+      const clientMap = {};
+      deals.forEach(d => {
+        if (!clientMap[d.client_name]) {
+          clientMap[d.client_name] = { totalBilled: 0, dealsCount: 0 };
+        }
+        clientMap[d.client_name].totalBilled += parseFloat(d.selling_price) || 0;
+        clientMap[d.client_name].dealsCount += 1;
+      });
+
+      const clientsGrid = document.getElementById('clients-grid');
+      const clientKeys = Object.keys(clientMap);
+      if (clientKeys.length === 0) {
+        clientsGrid.innerHTML = `
+          <div class="col-span-3 bg-white p-8 rounded-2xl border border-slate-100 text-center text-slate-400 font-medium">
+            No clients recorded yet. Adding deals will automatically populate your client ledgers.
+          </div>
+        `;
+      } else {
+        clientsGrid.innerHTML = clientKeys.map(clientName => `
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+            <div class="flex items-center justify-between">
+              <h4 class="font-bold text-slate-900 text-sm">${clientName}</h4>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-50 text-brand font-bold">Client</span>
+            </div>
+            <div class="pt-2 border-t border-slate-50 flex justify-between text-xs">
+              <span class="text-slate-400 font-medium">Orders Count:</span>
+              <span class="font-bold text-slate-800">${clientMap[clientName].dealsCount}</span>
+            </div>
+            <div class="flex justify-between text-xs">
+              <span class="text-slate-400 font-medium">Total Billed:</span>
+              <span class="font-bold text-slate-900">${fmtBDT(clientMap[clientName].totalBilled)}</span>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // 5. Vendors Grid
+      const vendorMap = {};
+      deals.forEach(d => {
+        if (!vendorMap[d.vendor_name]) {
+          vendorMap[d.vendor_name] = { totalCost: 0, dealsCount: 0 };
+        }
+        vendorMap[d.vendor_name].totalCost += parseFloat(d.total_buying_cost) || 0;
+        vendorMap[d.vendor_name].dealsCount += 1;
+      });
+
+      const vendorsGrid = document.getElementById('vendors-grid');
+      const vendorKeys = Object.keys(vendorMap);
+      if (vendorKeys.length === 0) {
+        vendorsGrid.innerHTML = `
+          <div class="col-span-3 bg-white p-8 rounded-2xl border border-slate-100 text-center text-slate-400 font-medium">
+            No vendors recorded yet. Adding deals will automatically populate your vendor supplier directory.
+          </div>
+        `;
+      } else {
+        vendorsGrid.innerHTML = vendorKeys.map(vendorName => `
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+            <div class="flex items-center justify-between">
+              <h4 class="font-bold text-slate-900 text-sm">${vendorName}</h4>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-bold">Supplier</span>
+            </div>
+            <div class="pt-2 border-t border-slate-50 flex justify-between text-xs">
+              <span class="text-slate-400 font-medium">Sourced Deals:</span>
+              <span class="font-bold text-slate-800">${vendorMap[vendorName].dealsCount}</span>
+            </div>
+            <div class="flex justify-between text-xs">
+              <span class="text-slate-400 font-medium">Procurement Value:</span>
+              <span class="font-bold text-slate-900">${fmtBDT(vendorMap[vendorName].totalCost)}</span>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      // Refresh Lucide icons
+      if (window.lucide) {
+        lucide.createIcons();
+      }
+    }
+
+    // Auto-Connect & Fetch from Supabase
+    async function loadData() {
+      // Load local storage first for instant render
+      const localDeals = localStorage.getItem('traderhub_deals');
+      if (localDeals) {
+        try { deals = JSON.parse(localDeals); } catch (e) {}
+      }
+
+      renderUI();
+
+      if (!supabase) return;
+
+      try {
+        const { data, error } = await supabase.from('deals').select('*').order('created_at', { ascending: false });
+        if (!error && data) {
+          deals = data;
+          localStorage.setItem('traderhub_deals', JSON.stringify(deals));
+          document.getElementById('dbStatusDot').className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+          document.getElementById('dbStatusText').innerText = "Supabase Live";
+          renderUI();
+        } else {
+          document.getElementById('dbStatusDot').className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+          document.getElementById('dbStatusText').innerText = "Supabase Ready";
+        }
+      } catch (err) {
+        console.warn('Supabase fetch:', err);
+      }
+    }
+
+    // Initialize on page load
+    window.addEventListener('DOMContentLoaded', () => {
+      loadData();
+    });
+  </script>
+</body>
+</html>

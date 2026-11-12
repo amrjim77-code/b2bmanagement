@@ -24,6 +24,7 @@ interface AppStore {
   deals: Deal[];
   payments: PaymentRecord[];
   savedParties: SavedParty[];
+  savedItems: string[];
 
   // Cloud Sync state
   isCloudConnected: boolean;
@@ -62,6 +63,10 @@ interface AppStore {
   deleteSavedParty: (id: string) => void;
   savePartyIfNotExists: (name: string, partyType: PartyType, extra?: Partial<SavedParty>) => SavedParty;
 
+  // Actions - Saved Items (Quick Re-use Catalog)
+  saveItemIfNotExists: (itemName: string) => void;
+  deleteSavedItem: (itemName: string) => void;
+
   // Cloud Actions
   syncWithSupabase: () => Promise<boolean>;
   pushAllToSupabase: () => Promise<boolean>;
@@ -80,6 +85,7 @@ export const useAppStore = create<AppStore>()(
       deals: INITIAL_DEALS,
       payments: INITIAL_PAYMENTS,
       savedParties: INITIAL_PARTIES,
+      savedItems: [],
 
       isCloudConnected: true,
       cloudSyncStatus: 'synced',
@@ -179,12 +185,31 @@ export const useAppStore = create<AppStore>()(
         });
       },
 
+      saveItemIfNotExists: (itemName: string) => {
+        const clean = (itemName || '').trim();
+        if (!clean) return;
+        const current = get().savedItems || [];
+        if (!current.some(item => item.toLowerCase() === clean.toLowerCase())) {
+          set({ savedItems: [clean, ...current] });
+        }
+      },
+
+      deleteSavedItem: (itemName: string) => {
+        const clean = (itemName || '').trim().toLowerCase();
+        set({
+          savedItems: (get().savedItems || []).filter(item => item.trim().toLowerCase() !== clean)
+        });
+      },
+
       addDeal: (input) => {
         if (input.clientName) {
           get().savePartyIfNotExists(input.clientName, 'Client');
         }
         if (input.vendorName) {
           get().savePartyIfNotExists(input.vendorName, 'Vendor');
+        }
+        if (input.itemDescription) {
+          get().saveItemIfNotExists(input.itemDescription);
         }
 
         const netProfit = input.sellingPrice - input.totalBuyingCost;
@@ -217,6 +242,9 @@ export const useAppStore = create<AppStore>()(
         }
         if (updateData.vendorName) {
           get().savePartyIfNotExists(updateData.vendorName, 'Vendor');
+        }
+        if (updateData.itemDescription) {
+          get().saveItemIfNotExists(updateData.itemDescription);
         }
 
         let updatedDeal: Deal | undefined;
@@ -335,10 +363,15 @@ export const useAppStore = create<AppStore>()(
         if (cloudData) {
           // If cloud has records, merge or use cloud data
           if (cloudData.deals.length > 0 || cloudData.payments.length > 0 || cloudData.savedParties.length > 0) {
+            const existingItems = get().savedItems || [];
+            const dealItems = cloudData.deals.map(d => (d.itemDescription || '').trim()).filter(Boolean);
+            const mergedItems = Array.from(new Set([...existingItems, ...dealItems]));
+
             set({
               deals: cloudData.deals,
               payments: cloudData.payments,
               savedParties: cloudData.savedParties,
+              savedItems: mergedItems,
               isCloudConnected: true,
               cloudSyncStatus: 'synced',
               lastSyncedAt: new Date().toISOString(),

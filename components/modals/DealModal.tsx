@@ -16,7 +16,10 @@ function DealForm({ editingDeal }: DealFormProps) {
     updateDeal, 
     setDealModalOpen, 
     savedParties, 
-    setPartyModalOpen 
+    setPartyModalOpen,
+    deals,
+    savedItems,
+    deleteSavedItem
   } = useAppStore();
 
   const [date, setDate] = useState(editingDeal?.date || new Date().toISOString().slice(0, 10));
@@ -48,6 +51,36 @@ function DealForm({ editingDeal }: DealFormProps) {
   const matchedVendor: SavedParty | undefined = savedVendors.find(
     v => v.name.toLowerCase() === vendorName.trim().toLowerCase()
   );
+
+  // Unique available items from saved catalog and existing deals
+  const availableItems = React.useMemo(() => {
+    const list: string[] = [];
+    (savedItems || []).forEach(item => {
+      const clean = item?.trim();
+      if (clean && !list.some(x => x.toLowerCase() === clean.toLowerCase())) {
+        list.push(clean);
+      }
+    });
+    deals.forEach(d => {
+      const clean = d.itemDescription?.trim();
+      if (clean && !list.some(x => x.toLowerCase() === clean.toLowerCase())) {
+        list.push(clean);
+      }
+    });
+    return list;
+  }, [savedItems, deals]);
+
+  const handleSelectSavedItem = (item: string) => {
+    setItemDescription(item);
+    // Auto-fill unit if a prior deal used this item
+    const prior = deals.find(d => d.itemDescription?.trim().toLowerCase() === item.toLowerCase());
+    if (prior && prior.unit) {
+      setUnit(prior.unit);
+    }
+    if (prior && prior.vendorRate && vendorRate === 0) {
+      setVendorRate(prior.vendorRate);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -212,15 +245,84 @@ function DealForm({ editingDeal }: DealFormProps) {
       {/* Goods & Quantity */}
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
         <div className="sm:col-span-6">
-          <label className="text-xs font-bold text-slate-700 block mb-1">Goods Description / Item</label>
-          <input
-            type="text"
-            placeholder="e.g. 500W Deformed Steel Rebar (16mm)"
-            value={itemDescription}
-            onChange={(e) => setItemDescription(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#5345E6] focus:bg-white font-medium"
-            required
-          />
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-bold text-slate-700 block">Goods Description / Item *</label>
+            {availableItems.length > 0 && (
+              <span className="text-[10px] text-slate-400 font-semibold">
+                {availableItems.length} saved
+              </span>
+            )}
+          </div>
+          <div className="relative">
+            <input
+              type="text"
+              list="saved-items-datalist"
+              placeholder="e.g. 500W Deformed Steel Rebar (16mm)"
+              value={itemDescription}
+              onChange={(e) => setItemDescription(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-hidden focus:border-[#5345E6] focus:bg-white font-medium"
+              required
+            />
+            <datalist id="saved-items-datalist">
+              {availableItems.map((item) => (
+                <option key={item} value={item} />
+              ))}
+            </datalist>
+          </div>
+
+          {/* Quick Clickable Saved Item Chips */}
+          {availableItems.length > 0 && (
+            <div className="mt-2 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                Click to re-use saved item:
+              </span>
+              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pt-0.5">
+                {availableItems.map((item) => {
+                  const isSelected = itemDescription.trim().toLowerCase() === item.toLowerCase();
+                  return (
+                    <div
+                      key={item}
+                      className={`inline-flex items-center rounded-lg text-[11px] transition-all border ${
+                        isSelected
+                          ? 'bg-[#5345E6] text-white border-[#5345E6] shadow-xs font-bold'
+                          : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 hover:border-[#5345E6]/40 font-medium'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleSelectSavedItem(item)}
+                        className="px-2.5 py-1 text-left cursor-pointer flex items-center gap-1"
+                        title={`Click to fill "${item}"`}
+                      >
+                        <span className="text-[10px]">📦</span>
+                        <span>{item}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteSavedItem(item);
+                        }}
+                        className={`pr-1.5 pl-0.5 hover:text-red-500 opacity-60 hover:opacity-100 cursor-pointer text-xs leading-none ${
+                          isSelected ? 'text-white/80 hover:text-white' : 'text-slate-400'
+                        }`}
+                        title={`Remove "${item}" from saved list`}
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {itemDescription.trim() && !availableItems.some(i => i.toLowerCase() === itemDescription.trim().toLowerCase()) && (
+            <span className="text-[10px] text-emerald-600 font-medium mt-1 flex items-center gap-1">
+              <span>✓</span>
+              <span>Will be saved automatically for one-click re-use</span>
+            </span>
+          )}
         </div>
 
         <div className="sm:col-span-3">

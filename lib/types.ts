@@ -54,6 +54,7 @@ export interface PaymentRecord {
   paymentMethod: PaymentMethod;
   reference?: string;
   notes?: string;
+  settleOutstanding?: boolean;
 }
 
 export interface PartySummary {

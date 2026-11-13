@@ -318,9 +318,10 @@ export const useAppStore = create<AppStore>()(
         };
 
         let updatedDeals = get().deals;
-        let linkedUpdatedDeal: Deal | undefined;
+        const dealsToSync: Deal[] = [];
 
         if (paymentInput.dealId) {
+          // Specific single deal payment
           updatedDeals = updatedDeals.map(deal => {
             if (deal.id !== paymentInput.dealId) return deal;
 
@@ -331,12 +332,58 @@ export const useAppStore = create<AppStore>()(
                 : newClientPaid > 0 
                   ? 'Partial' 
                   : 'Unpaid';
-              linkedUpdatedDeal = { ...deal, clientPaidAmount: newClientPaid, paymentStatus };
-              return linkedUpdatedDeal;
+              const updated = { ...deal, clientPaidAmount: newClientPaid, paymentStatus };
+              dealsToSync.push(updated);
+              return updated;
             } else {
               const newVendorPaid = (deal.vendorPaidAmount || 0) + paymentInput.amount;
-              linkedUpdatedDeal = { ...deal, vendorPaidAmount: newVendorPaid };
-              return linkedUpdatedDeal;
+              const updated = { ...deal, vendorPaidAmount: newVendorPaid };
+              dealsToSync.push(updated);
+              return updated;
+            }
+          });
+        } else {
+          // Total Outstanding / General Payment across all open deals
+          let remainingAmount = paymentInput.amount;
+          const targetParty = (paymentInput.partyName || '').trim().toLowerCase();
+
+          updatedDeals = updatedDeals.map(deal => {
+            if (remainingAmount <= 0) return deal;
+
+            const isMatch = paymentInput.partyType === 'Client'
+              ? deal.clientName.trim().toLowerCase() === targetParty
+              : deal.vendorName.trim().toLowerCase() === targetParty;
+
+            if (!isMatch) return deal;
+
+            if (paymentInput.partyType === 'Client') {
+              const due = Math.max(0, deal.sellingPrice - (deal.clientPaidAmount || 0));
+              if (due <= 0) return deal;
+
+              const payThisDeal = Math.min(remainingAmount, due);
+              const newClientPaid = (deal.clientPaidAmount || 0) + payThisDeal;
+              remainingAmount -= payThisDeal;
+
+              const paymentStatus: PaymentStatus = newClientPaid >= deal.sellingPrice
+                ? 'Settled'
+                : newClientPaid > 0
+                  ? 'Partial'
+                  : 'Unpaid';
+
+              const updated = { ...deal, clientPaidAmount: newClientPaid, paymentStatus };
+              dealsToSync.push(updated);
+              return updated;
+            } else {
+              const due = Math.max(0, deal.totalBuyingCost - (deal.vendorPaidAmount || 0));
+              if (due <= 0) return deal;
+
+              const payThisDeal = Math.min(remainingAmount, due);
+              const newVendorPaid = (deal.vendorPaidAmount || 0) + payThisDeal;
+              remainingAmount -= payThisDeal;
+
+              const updated = { ...deal, vendorPaidAmount: newVendorPaid };
+              dealsToSync.push(updated);
+              return updated;
             }
           });
         }
@@ -347,9 +394,7 @@ export const useAppStore = create<AppStore>()(
         });
 
         syncPaymentToSupabase(newPayment);
-        if (linkedUpdatedDeal) {
-          syncDealToSupabase(linkedUpdatedDeal);
-        }
+        dealsToSync.forEach(d => syncDealToSupabase(d));
 
         return newPayment;
       },
